@@ -14,7 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ai_detection_results: {
+        Row: {
+          ai_probability: number
+          analysis_summary: string | null
+          confidence_score: number
+          created_at: string
+          detected_patterns: Json | null
+          detection_service: string
+          document_content: string
+          document_name: string
+          human_probability: number
+          id: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          ai_probability: number
+          analysis_summary?: string | null
+          confidence_score: number
+          created_at?: string
+          detected_patterns?: Json | null
+          detection_service: string
+          document_content: string
+          document_name: string
+          human_probability: number
+          id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          ai_probability?: number
+          analysis_summary?: string | null
+          confidence_score?: number
+          created_at?: string
+          detected_patterns?: Json | null
+          detection_service?: string
+          document_content?: string
+          document_name?: string
+          human_probability?: number
+          id?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
