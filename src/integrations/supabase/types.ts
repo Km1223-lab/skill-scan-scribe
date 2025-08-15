@@ -27,7 +27,7 @@ export type Database = {
           human_probability: number
           id: string
           updated_at: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           ai_probability: number
@@ -41,7 +41,7 @@ export type Database = {
           human_probability: number
           id?: string
           updated_at?: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           ai_probability?: number
@@ -55,7 +55,7 @@ export type Database = {
           human_probability?: number
           id?: string
           updated_at?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
       }
