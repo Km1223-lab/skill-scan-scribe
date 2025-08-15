@@ -46,13 +46,13 @@ const Contact = () => {
     {
       icon: Phone,
       title: 'Call Us',
-      details: ['+254 XXX XXX XXX', '+254 XXX XXX XXX'],
+      details: ['+254748166300'],
       description: 'Mon-Fri 8AM-6PM, Sat 9AM-4PM'
     },
     {
       icon: Mail,
       title: 'Email Us',
-      details: ['info@kgdesigns.co.ke', 'support@kgdesigns.co.ke'],
+      details: ['mrkg848@gmail.com'],
       description: 'We respond within 2 hours'
     },
     {
@@ -314,12 +314,12 @@ const Contact = () => {
               <p className="text-muted-foreground mb-6">
                 Book a free consultation to discuss your specific needs and get expert advice on the best solutions for you.
               </p>
-              <Button asChild className="w-full">
-                <a href="tel:+254">
-                  <Phone className="mr-2 h-5 w-5" />
-                  Call to Schedule
-                </a>
-              </Button>
+                <Button asChild className="w-full">
+                  <a href="tel:+254748166300">
+                    <Phone className="mr-2 h-5 w-5" />
+                    Call to Schedule
+                  </a>
+                </Button>
             </Card>
           </div>
         </div>
