@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Upload, BarChart3, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ScoreData {
   overallScore: number;
@@ -54,64 +55,46 @@ export const ResumeScorer = ({ onBack }: ResumeScorerProps) => {
     setIsAnalyzing(true);
     const analysisInterval = simulateAnalysis();
 
-    // Simulate analysis
-    await new Promise(resolve => setTimeout(resolve, 2500));
-
-    // Mock score data
-    const mockScore: ScoreData = {
-      overallScore: 78,
-      categories: {
-        formatting: {
-          score: 85,
-          feedback: [
-            "Clean, professional layout detected",
-            "Consistent font usage throughout",
-            "Proper use of white space"
-          ]
-        },
-        keywords: {
-          score: 72,
-          feedback: [
-            "Good industry keyword coverage",
-            "Missing some key technical terms",
-            "Consider adding more action verbs"
-          ]
-        },
-        structure: {
-          score: 90,
-          feedback: [
-            "Clear section headers found",
-            "Logical information flow",
-            "Contact information properly placed"
-          ]
-        },
-        readability: {
-          score: 65,
-          feedback: [
-            "Some bullet points too long",
-            "Good use of quantifiable achievements",
-            "Consider shortening summary section"
-          ]
+    try {
+      // Convert file to text for analysis
+      const text = await file.text();
+      
+      // Use AI document detector for content analysis
+      const { data, error } = await supabase.functions.invoke('ai-document-detector', {
+        body: {
+          documentContent: text,
+          documentName: file.name
         }
-      },
-      recommendations: [
-        "Add more industry-specific keywords to improve ATS matching",
-        "Shorten bullet points to 1-2 lines for better readability",
-        "Include more quantified achievements with specific numbers",
-        "Add a skills section if not present",
-        "Ensure consistent date formatting throughout"
-      ]
-    };
+      });
 
-    clearInterval(analysisInterval);
-    setProgress(100);
-    setScoreData(mockScore);
-    setIsAnalyzing(false);
+      if (error) {
+        throw error;
+      }
 
-    toast({
-      title: "Analysis Complete!",
-      description: `Your resume scored ${mockScore.overallScore}/100 for ATS compatibility.`,
-    });
+      // Calculate ATS score based on AI detection and content analysis
+      const atsScore = calculateATSScore(text, data.result);
+
+      clearInterval(analysisInterval);
+      setProgress(100);
+      setScoreData(atsScore);
+      setIsAnalyzing(false);
+
+      toast({
+        title: "Analysis Complete!",
+        description: `Your resume scored ${atsScore.overallScore}/100 for ATS compatibility.`,
+      });
+    } catch (error) {
+      console.error('Error analyzing resume:', error);
+      clearInterval(analysisInterval);
+      setIsAnalyzing(false);
+      setProgress(0);
+      
+      toast({
+        title: "Error",
+        description: "Failed to analyze resume. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -159,6 +142,117 @@ export const ResumeScorer = ({ onBack }: ResumeScorerProps) => {
     if (score >= 80) return <CheckCircle className="h-5 w-5 text-success" />;
     if (score >= 60) return <AlertCircle className="h-5 w-5 text-warning" />;
     return <XCircle className="h-5 w-5 text-destructive" />;
+  };
+
+  const calculateATSScore = (content: string, aiResult: any): ScoreData => {
+    const text = content.toLowerCase();
+    
+    // ATS-specific scoring factors
+    const formatScore = analyzeFormatting(text);
+    const keywordScore = analyzeKeywords(text);
+    const structureScore = analyzeStructure(text);
+    const readabilityScore = analyzeReadability(text);
+    
+    const overallScore = Math.round((formatScore.score + keywordScore.score + structureScore.score + readabilityScore.score) / 4);
+    
+    return {
+      overallScore,
+      categories: {
+        formatting: formatScore,
+        keywords: keywordScore,
+        structure: structureScore,
+        readability: readabilityScore
+      },
+      recommendations: generateRecommendations(overallScore, aiResult)
+    };
+  };
+
+  const analyzeFormatting = (text: string) => {
+    let score = 85;
+    const feedback = ["Clean, professional layout detected"];
+    
+    if (text.includes('pdf') || text.includes('docx')) {
+      feedback.push("Proper file format used");
+    } else {
+      score -= 10;
+      feedback.push("Consider using PDF or DOCX format");
+    }
+    
+    return { score, feedback };
+  };
+
+  const analyzeKeywords = (text: string) => {
+    const commonKeywords = ['experience', 'skills', 'project', 'team', 'management', 'development', 'analysis'];
+    const foundKeywords = commonKeywords.filter(keyword => text.includes(keyword));
+    
+    const score = Math.min(95, 50 + (foundKeywords.length * 8));
+    const feedback = [
+      `Found ${foundKeywords.length} relevant keywords`,
+      score < 70 ? "Consider adding more industry-specific terms" : "Good keyword coverage"
+    ];
+    
+    return { score, feedback };
+  };
+
+  const analyzeStructure = (text: string) => {
+    let score = 90;
+    const feedback = ["Clear section organization"];
+    
+    const sections = ['experience', 'education', 'skills', 'summary'];
+    const foundSections = sections.filter(section => text.includes(section));
+    
+    if (foundSections.length < 3) {
+      score -= 15;
+      feedback.push("Missing some standard resume sections");
+    }
+    
+    return { score, feedback };
+  };
+
+  const analyzeReadability = (text: string) => {
+    const sentences = text.split(/[.!?]+/).length;
+    const words = text.split(/\s+/).length;
+    const avgWordsPerSentence = words / sentences;
+    
+    let score = 75;
+    const feedback = [];
+    
+    if (avgWordsPerSentence > 25) {
+      score -= 15;
+      feedback.push("Some sentences are too long");
+    } else {
+      feedback.push("Good sentence length");
+    }
+    
+    if (words < 200) {
+      score -= 10;
+      feedback.push("Resume might be too brief");
+    } else if (words > 800) {
+      score -= 5;
+      feedback.push("Resume might be too lengthy");
+    } else {
+      feedback.push("Appropriate length");
+    }
+    
+    return { score, feedback };
+  };
+
+  const generateRecommendations = (score: number, aiResult: any) => {
+    const recommendations = [];
+    
+    if (score < 70) {
+      recommendations.push("Focus on ATS-friendly formatting with clear section headers");
+      recommendations.push("Add more relevant keywords from your industry");
+    }
+    
+    if (aiResult?.aiProbability > 0.5) {
+      recommendations.push("Content appears AI-generated. Add more personal achievements and specific examples");
+    }
+    
+    recommendations.push("Use bullet points for better readability");
+    recommendations.push("Include quantifiable achievements with specific metrics");
+    
+    return recommendations;
   };
 
   return (

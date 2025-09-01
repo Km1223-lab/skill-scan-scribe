@@ -59,12 +59,364 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_messages: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          message: string
+          name: string
+          phone: string | null
+          replied_at: string | null
+          service: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          message: string
+          name: string
+          phone?: string | null
+          replied_at?: string | null
+          service?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string
+          name?: string
+          phone?: string | null
+          replied_at?: string | null
+          service?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: number
+          title: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: never
+          title?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: never
+          title?: string | null
+        }
+        Relationships: []
+      }
+      email_integrations: {
+        Row: {
+          created_at: string
+          encrypted_access_token: string | null
+          encrypted_refresh_token: string | null
+          encryption_key_id: string | null
+          id: string
+          is_connected: boolean | null
+          last_sync: string | null
+          provider: string
+          sync_settings: Json | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          encrypted_access_token?: string | null
+          encrypted_refresh_token?: string | null
+          encryption_key_id?: string | null
+          id?: string
+          is_connected?: boolean | null
+          last_sync?: string | null
+          provider?: string
+          sync_settings?: Json | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          encrypted_access_token?: string | null
+          encrypted_refresh_token?: string | null
+          encryption_key_id?: string | null
+          id?: string
+          is_connected?: boolean | null
+          last_sync?: string | null
+          provider?: string
+          sync_settings?: Json | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      job_applications: {
+        Row: {
+          company: string
+          created_at: string
+          date_applied: string
+          description: string | null
+          id: string
+          job_title: string
+          job_url: string | null
+          last_update: string
+          location: string | null
+          notes: string | null
+          salary: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company: string
+          created_at?: string
+          date_applied?: string
+          description?: string | null
+          id?: string
+          job_title: string
+          job_url?: string | null
+          last_update?: string
+          location?: string | null
+          notes?: string | null
+          salary?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company?: string
+          created_at?: string
+          date_applied?: string
+          description?: string | null
+          id?: string
+          job_title?: string
+          job_url?: string | null
+          last_update?: string
+          location?: string | null
+          notes?: string | null
+          salary?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: number | null
+          created_at: string | null
+          id: number
+          sender_id: string | null
+        }
+        Insert: {
+          content: string
+          conversation_id?: number | null
+          created_at?: string | null
+          id?: never
+          sender_id?: string | null
+        }
+        Update: {
+          content?: string
+          conversation_id?: number | null
+          created_at?: string | null
+          id?: never
+          sender_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          preferences: Json | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          preferences?: Json | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      resumes: {
+        Row: {
+          created_at: string
+          education: Json | null
+          experience: Json | null
+          id: string
+          is_public: boolean | null
+          personal_info: Json
+          skills: Json | null
+          summary: string | null
+          template_name: string | null
+          title: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          education?: Json | null
+          experience?: Json | null
+          id?: string
+          is_public?: boolean | null
+          personal_info: Json
+          skills?: Json | null
+          summary?: string | null
+          template_name?: string | null
+          title: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          education?: Json | null
+          experience?: Json | null
+          id?: string
+          is_public?: boolean | null
+          personal_info?: Json
+          skills?: Json | null
+          summary?: string | null
+          template_name?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      service_requests: {
+        Row: {
+          actual_cost: number | null
+          attachments: Json | null
+          client_email: string
+          client_name: string
+          client_phone: string
+          completion_date: string | null
+          created_at: string
+          description: string
+          estimated_completion_date: string | null
+          estimated_cost: number | null
+          id: string
+          notes: string | null
+          priority: string
+          service_category: string
+          service_type: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          actual_cost?: number | null
+          attachments?: Json | null
+          client_email: string
+          client_name: string
+          client_phone: string
+          completion_date?: string | null
+          created_at?: string
+          description: string
+          estimated_completion_date?: string | null
+          estimated_cost?: number | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          service_category: string
+          service_type: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          actual_cost?: number | null
+          attachments?: Json | null
+          client_email?: string
+          client_name?: string
+          client_phone?: string
+          completion_date?: string | null
+          created_at?: string
+          description?: string
+          estimated_completion_date?: string | null
+          estimated_cost?: number | null
+          id?: string
+          notes?: string | null
+          priority?: string
+          service_category?: string
+          service_type?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      decrypt_token: {
+        Args: { encrypted_token: string; encryption_key: string }
+        Returns: string
+      }
+      disconnect_email_integration: {
+        Args: { p_provider: string; p_user_id: string }
+        Returns: boolean
+      }
+      encrypt_token: {
+        Args: { token_value: string }
+        Returns: string
+      }
+      get_decrypted_tokens: {
+        Args: { p_provider: string; p_user_id: string }
+        Returns: {
+          access_token: string
+          refresh_token: string
+          token_expires_at: string
+        }[]
+      }
+      store_encrypted_tokens: {
+        Args: {
+          p_access_token: string
+          p_provider: string
+          p_refresh_token: string
+          p_token_expires_at: string
+          p_user_id: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

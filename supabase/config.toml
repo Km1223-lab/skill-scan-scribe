@@ -1,1 +1,13 @@
 project_id = "rsltyfvemhapjeeufqbn"
+
+[functions.contact-form]
+verify_jwt = false
+
+[functions.service-request]
+verify_jwt = false
+
+[functions.resume-generator]
+verify_jwt = false
+
+[functions.ai-document-detector]
+verify_jwt = false

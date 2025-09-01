@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Upload, FileText, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Progress } from '@/components/ui/progress';
+import { supabase } from '@/integrations/supabase/client';
 
 interface ParsedData {
   personalInfo: {
@@ -56,51 +57,79 @@ export const ResumeParser = ({ onBack }: ResumeParserProps) => {
     setIsProcessing(true);
     const progressInterval = simulateProgress();
 
-    // Simulate file processing
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      // Convert file to text (simplified - in production use proper PDF/DOC parsing)
+      const text = await file.text();
+      
+      // Use AI document detector to analyze the content
+      const { data, error } = await supabase.functions.invoke('ai-document-detector', {
+        body: {
+          documentContent: text,
+          documentName: file.name
+        }
+      });
 
-    // Mock parsed data
-    const mockData: ParsedData = {
-      personalInfo: {
-        name: "John Smith",
-        email: "john.smith@email.com",
-        phone: "+1 (555) 123-4567",
-        location: "San Francisco, CA"
-      },
-      summary: "Experienced software engineer with 5+ years of experience in full-stack development. Proficient in modern web technologies and passionate about creating scalable solutions.",
-      experience: [
-        {
-          company: "Tech Corp",
-          position: "Senior Software Engineer",
-          duration: "Jan 2022 - Present",
-          description: "Led development of microservices architecture serving 1M+ users. Implemented CI/CD pipelines reducing deployment time by 60%."
+      if (error) {
+        throw error;
+      }
+
+      // Simulate additional processing time
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Mock parsed data (in production, use proper resume parsing)
+      const mockData: ParsedData = {
+        personalInfo: {
+          name: "John Smith",
+          email: "john.smith@email.com",
+          phone: "+1 (555) 123-4567",
+          location: "San Francisco, CA"
         },
-        {
-          company: "StartupXYZ",
-          position: "Full Stack Developer",
-          duration: "Jun 2019 - Dec 2021",
-          description: "Built responsive web applications using React and Node.js. Collaborated with UX team to improve user engagement by 40%."
-        }
-      ],
-      education: [
-        {
-          institution: "Stanford University",
-          degree: "Bachelor of Science in Computer Science",
-          year: "2019"
-        }
-      ],
-      skills: ["JavaScript", "React", "Node.js", "Python", "AWS", "Docker", "Kubernetes", "SQL", "Git"]
-    };
+        summary: "Experienced software engineer with 5+ years of experience in full-stack development. Proficient in modern web technologies and passionate about creating scalable solutions.",
+        experience: [
+          {
+            company: "Tech Corp",
+            position: "Senior Software Engineer",
+            duration: "Jan 2022 - Present",
+            description: "Led development of microservices architecture serving 1M+ users. Implemented CI/CD pipelines reducing deployment time by 60%."
+          },
+          {
+            company: "StartupXYZ",
+            position: "Full Stack Developer",
+            duration: "Jun 2019 - Dec 2021",
+            description: "Built responsive web applications using React and Node.js. Collaborated with UX team to improve user engagement by 40%."
+          }
+        ],
+        education: [
+          {
+            institution: "Stanford University",
+            degree: "Bachelor of Science in Computer Science",
+            year: "2019"
+          }
+        ],
+        skills: ["JavaScript", "React", "Node.js", "Python", "AWS", "Docker", "Kubernetes", "SQL", "Git"]
+      };
 
-    clearInterval(progressInterval);
-    setProgress(100);
-    setParsedData(mockData);
-    setIsProcessing(false);
+      clearInterval(progressInterval);
+      setProgress(100);
+      setParsedData(mockData);
+      setIsProcessing(false);
 
-    toast({
-      title: "Resume Parsed Successfully!",
-      description: "Your resume has been analyzed and data extracted.",
-    });
+      toast({
+        title: "Resume Parsed Successfully!",
+        description: "Your resume has been analyzed and data extracted.",
+      });
+    } catch (error) {
+      console.error('Error parsing resume:', error);
+      clearInterval(progressInterval);
+      setIsProcessing(false);
+      setProgress(0);
+      
+      toast({
+        title: "Error",
+        description: "Failed to parse resume. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {

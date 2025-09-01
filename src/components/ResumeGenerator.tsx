@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { ArrowLeft, Plus, Trash2, Download } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Experience {
   id: string;
@@ -127,11 +128,41 @@ export const ResumeGenerator = ({ onBack }: ResumeGeneratorProps) => {
     setResumeData(prev => ({ ...prev, skills }));
   };
 
-  const generateResume = () => {
-    toast({
-      title: "Resume Generated!",
-      description: "Your ATS-optimized resume has been created successfully.",
-    });
+  const generateResume = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('resume-generator', {
+        body: {
+          personalInfo: resumeData.personalInfo,
+          summary: resumeData.summary,
+          experience: resumeData.experience,
+          education: resumeData.education,
+          skills: resumeData.skills
+        }
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Resume Generated!",
+        description: "Your ATS-optimized resume has been created successfully.",
+      });
+
+      // Open download link in new tab
+      if (data.downloadUrl) {
+        window.open(data.previewContent ? 
+          `data:text/html;charset=utf-8,${encodeURIComponent(data.previewContent)}` : 
+          data.downloadUrl, '_blank');
+      }
+    } catch (error) {
+      console.error('Error generating resume:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate resume. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const renderStep = () => {

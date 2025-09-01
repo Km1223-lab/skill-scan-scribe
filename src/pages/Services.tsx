@@ -2,6 +2,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { ServiceRequestForm } from '@/components/ServiceRequestForm';
 import { 
   FileText, 
   Globe, 
@@ -16,6 +18,17 @@ import {
 } from 'lucide-react';
 
 const Services = () => {
+  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [selectedService, setSelectedService] = useState('');
+
+  if (showRequestForm) {
+    return <ServiceRequestForm onBack={() => setShowRequestForm(false)} selectedService={selectedService} />;
+  }
+
+  const handleRequestService = (categoryKey: string) => {
+    setSelectedService(categoryKey);
+    setShowRequestForm(true);
+  };
   const serviceCategories = [
     {
       title: 'E-Citizen Services',
@@ -294,10 +307,19 @@ const Services = () => {
                           <span className="text-sm font-medium">{service.duration}</span>
                         </div>
                       </div>
-                      <Button variant="outline" size="sm" className="w-full group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
-                        Learn More
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1 group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
+                          Learn More
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => handleRequestService(Object.keys(serviceCategories)[categoryIndex])}
+                        >
+                          Request Service
+                        </Button>
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -378,10 +400,10 @@ const Services = () => {
             Contact us today to discuss your specific needs and get a personalized quote.
           </p>
           <Button variant="secondary" size="lg" asChild>
-            <Link to="/contact">
+            <span onClick={() => setShowRequestForm(true)} className="cursor-pointer">
               Get Your Quote Today
               <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
+            </span>
           </Button>
         </div>
       </section>
