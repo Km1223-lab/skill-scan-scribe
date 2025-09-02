@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.ai-document-detector]
 verify_jwt = false
+
+[functions.public-resume]
+verify_jwt = false
