@@ -107,15 +107,31 @@ serve(async (req) => {
   }
 })
 
-function generateResumeHTML(data: any): string {
+function generateResumeHTML(data: any, isPublic: boolean = false): string {
   const { personalInfo, summary, experience, education, skills } = data
+  
+  // Filter sensitive information for public resumes
+  const safePersonalInfo = isPublic ? {
+    name: personalInfo.name,
+    location: personalInfo.location,
+    linkedin: personalInfo.linkedin
+  } : personalInfo;
+  
+  // Build contact info array, excluding sensitive data for public resumes
+  const contactParts = [];
+  if (!isPublic && personalInfo.email) contactParts.push(personalInfo.email);
+  if (!isPublic && personalInfo.phone) contactParts.push(personalInfo.phone);
+  if (safePersonalInfo.location) contactParts.push(safePersonalInfo.location);
+  if (safePersonalInfo.linkedin) contactParts.push(safePersonalInfo.linkedin);
+  
+  const contactInfo = contactParts.join(' | ');
   
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>${personalInfo.name} - Resume</title>
+      <title>${safePersonalInfo.name} - Resume</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; color: #333; }
         .header { text-align: center; margin-bottom: 30px; }
@@ -134,15 +150,14 @@ function generateResumeHTML(data: any): string {
         .skills-list { display: flex; flex-wrap: wrap; gap: 10px; }
         .skill { background: #f0f0f0; padding: 5px 12px; border-radius: 15px; font-size: 14px; }
         @media print { body { margin: 0; padding: 15px; } }
+        ${isPublic ? '.privacy-notice { background: #f9f9f9; padding: 10px; margin-bottom: 20px; border-left: 4px solid #007acc; font-size: 12px; color: #666; }' : ''}
       </style>
     </head>
     <body>
+      ${isPublic ? '<div class="privacy-notice">📋 Public Resume View - Contact information has been filtered for privacy protection.</div>' : ''}
       <div class="header">
-        <div class="name">${personalInfo.name}</div>
-        <div class="contact">
-          ${personalInfo.email} | ${personalInfo.phone || ''} | ${personalInfo.location || ''}
-          ${personalInfo.linkedin ? ` | ${personalInfo.linkedin}` : ''}
-        </div>
+        <div class="name">${safePersonalInfo.name}</div>
+        ${contactInfo ? `<div class="contact">${contactInfo}</div>` : ''}
       </div>
 
       ${summary ? `
