@@ -387,7 +387,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_resumes: {
+        Row: {
+          created_at: string | null
+          education: Json | null
+          experience: Json | null
+          id: string | null
+          is_public: boolean | null
+          personal_info: Json | null
+          share_token: string | null
+          skills: Json | null
+          summary: string | null
+          template_name: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       decrypt_token: {
@@ -401,6 +417,23 @@ export type Database = {
       encrypt_token: {
         Args: { token_value: string }
         Returns: string
+      }
+      filter_sensitive_resume_data: {
+        Args: { resume_row: Database["public"]["Tables"]["resumes"]["Row"] }
+        Returns: {
+          created_at: string
+          education: Json
+          experience: Json
+          id: string
+          is_public: boolean
+          personal_info: Json
+          share_token: string
+          skills: Json
+          summary: string
+          template_name: string
+          title: string
+          updated_at: string
+        }[]
       }
       get_decrypted_tokens: {
         Args: { p_provider: string; p_user_id: string }
