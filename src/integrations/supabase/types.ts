@@ -285,6 +285,7 @@ export type Database = {
           id: string
           is_public: boolean | null
           personal_info: Json
+          share_token: string | null
           skills: Json | null
           summary: string | null
           template_name: string | null
@@ -299,6 +300,7 @@ export type Database = {
           id?: string
           is_public?: boolean | null
           personal_info: Json
+          share_token?: string | null
           skills?: Json | null
           summary?: string | null
           template_name?: string | null
@@ -313,6 +315,7 @@ export type Database = {
           id?: string
           is_public?: boolean | null
           personal_info?: Json
+          share_token?: string | null
           skills?: Json | null
           summary?: string | null
           template_name?: string | null
