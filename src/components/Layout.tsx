@@ -3,18 +3,16 @@ import { Button } from '@/components/ui/button';
 import { Menu, X, User, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const location = useLocation();
   const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   const navigation = [
     { name: 'Home', href: '/' },
@@ -65,12 +63,14 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem disabled>
-                      {user.email}
+                    <DropdownMenuItem asChild>
+                      <div className="px-2 py-1.5 text-sm">
+                        Signed in as<br />
+                        <strong>{user.email}</strong>
+                      </div>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => signOut()}>
-                      <LogOut className="h-4 w-4 mr-2" />
+                    <DropdownMenuItem onClick={handleSignOut}>
+                      <LogOut className="mr-2 h-4 w-4" />
                       Sign Out
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -116,18 +116,19 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
               <div className="px-3 py-2">
                 {user ? (
                   <div className="space-y-2">
-                    <div className="px-3 py-2 text-sm text-muted-foreground border-b">
-                      {user.email}
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                      Signed in as<br />
+                      <strong>{user.email}</strong>
                     </div>
                     <Button 
                       variant="outline" 
                       className="w-full" 
                       onClick={() => {
-                        signOut();
+                        handleSignOut();
                         setIsMenuOpen(false);
                       }}
                     >
-                      <LogOut className="h-4 w-4 mr-2" />
+                      <LogOut className="mr-2 h-4 w-4" />
                       Sign Out
                     </Button>
                   </div>
