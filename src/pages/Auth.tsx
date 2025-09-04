@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, Shield, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { validatePasswordStrength, getPasswordStrengthText, getPasswordStrengthColor } from '@/lib/passwordValidation';
 
 const Auth = () => {
   const { user, signIn, signUp, loading: authLoading } = useAuth();
@@ -22,6 +23,7 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [passwordStrength, setPasswordStrength] = useState({ isValid: false, score: 0, feedback: [] });
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -65,8 +67,9 @@ const Auth = () => {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    const validation = validatePasswordStrength(password);
+    if (!validation.isValid) {
+      setError(`Password requirements not met: ${validation.feedback.join(', ')}`);
       return;
     }
 
@@ -219,11 +222,34 @@ const Auth = () => {
                     <Input
                       id="signup-password"
                       type="password"
-                      placeholder="Choose a password (min. 6 characters)"
+                      placeholder="Choose a strong password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(e) => {
+                        setPassword(e.target.value);
+                        setPasswordStrength(validatePasswordStrength(e.target.value));
+                      }}
                       required
                     />
+                    {password && (
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          <span className={`font-medium ${getPasswordStrengthColor(passwordStrength.score)}`}>
+                            Password Strength: {getPasswordStrengthText(passwordStrength.score)}
+                          </span>
+                        </div>
+                        {passwordStrength.feedback.length > 0 && (
+                          <div className="space-y-1">
+                            {passwordStrength.feedback.map((feedback, index) => (
+                              <div key={index} className="flex items-start gap-2 text-muted-foreground">
+                                <AlertTriangle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                <span className="text-xs">{feedback}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <Button
                     type="submit"
