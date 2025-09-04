@@ -1,19 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, ArrowLeft, Shield, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Loader2, ArrowLeft, Shield, AlertTriangle, KeyRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { validatePasswordStrength, getPasswordStrengthText, getPasswordStrengthColor } from '@/lib/passwordValidation';
+import { Captcha } from '@/components/ui/captcha';
 
 const Auth = () => {
-  const { user, signIn, signUp, loading: authLoading } = useAuth();
+  const { user, signIn, signUp, resetPassword, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('signin');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +27,11 @@ const Auth = () => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [passwordStrength, setPasswordStrength] = useState({ isValid: false, score: 0, feedback: [] });
+  
+  // Captcha and forgot password states
+  const [isCaptchaValid, setIsCaptchaValid] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -36,6 +44,11 @@ const Auth = () => {
     e.preventDefault();
     if (!email || !password) {
       setError('Please fill in all fields');
+      return;
+    }
+
+    if (!isCaptchaValid) {
+      setError('Please complete the verification');
       return;
     }
 
@@ -91,6 +104,33 @@ const Auth = () => {
         setEmail('');
         setPassword('');
         setFullName('');
+      }
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetEmail) {
+      setError('Please enter your email address');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const { error } = await resetPassword(resetEmail);
+      if (error) {
+        setError(error.message);
+      } else {
+        setSuccess('Password reset instructions have been sent to your email');
+        setShowForgotPassword(false);
+        setResetEmail('');
       }
     } catch (err) {
       setError('An unexpected error occurred. Please try again.');
@@ -176,10 +216,12 @@ const Auth = () => {
                       required
                     />
                   </div>
+                  <Captcha onVerify={setIsCaptchaValid} className="mb-4" />
+                  
                   <Button
                     type="submit"
                     className="w-full"
-                    disabled={loading}
+                    disabled={loading || !isCaptchaValid}
                   >
                     {loading ? (
                       <>
@@ -190,6 +232,52 @@ const Auth = () => {
                       'Sign In'
                     )}
                   </Button>
+                  
+                  <div className="text-center mt-4">
+                    <Dialog open={showForgotPassword} onOpenChange={setShowForgotPassword}>
+                      <DialogTrigger asChild>
+                        <Button variant="link" className="text-sm text-muted-foreground hover:text-primary">
+                          <KeyRound className="h-4 w-4 mr-2" />
+                          Forgot your password?
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-md">
+                        <DialogHeader>
+                          <DialogTitle>Reset Password</DialogTitle>
+                          <DialogDescription>
+                            Enter your email address and we'll send you instructions to reset your password.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <form onSubmit={handleForgotPassword} className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="reset-email">Email Address</Label>
+                            <Input
+                              id="reset-email"
+                              type="email"
+                              placeholder="Enter your email"
+                              value={resetEmail}
+                              onChange={(e) => setResetEmail(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={loading}
+                          >
+                            {loading ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Sending...
+                              </>
+                            ) : (
+                              'Send Reset Instructions'
+                            )}
+                          </Button>
+                        </form>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 </form>
               </TabsContent>
 
