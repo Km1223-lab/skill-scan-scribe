@@ -10,7 +10,7 @@ import About from "./pages/About";
 import Contact from "./pages/Contact";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import { AuthProvider } from "./hooks/useAuth";
+import { AuthProvider } from "./hooks/useAuth.tsx";
 import '@fontsource/permanent-marker';
 
 const queryClient = new QueryClient();
