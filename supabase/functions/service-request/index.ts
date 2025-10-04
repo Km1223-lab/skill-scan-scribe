@@ -1,9 +1,71 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Input validation schema
+const serviceRequestSchema = z.object({
+  clientName: z.string().trim().min(1, "Name is required").max(100, "Name must be less than 100 characters"),
+  clientEmail: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters"),
+  clientPhone: z.string().trim().min(1, "Phone is required").max(20, "Phone must be less than 20 characters"),
+  serviceCategory: z.string().trim().min(1, "Service category is required").max(50, "Category must be less than 50 characters"),
+  serviceType: z.string().trim().min(1, "Service type is required").max(50, "Service type must be less than 50 characters"),
+  description: z.string().trim().min(1, "Description is required").max(5000, "Description must be less than 5000 characters"),
+  urgency: z.enum(['normal', 'urgent']).optional().default('normal')
+})
+
+// HTML escape function
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+// Rate limiting function
+async function checkRateLimit(supabase: any, identifier: string, endpoint: string, limit: number, windowMinutes: number): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000)
+  
+  const { data: existing, error } = await supabase
+    .from('rate_limits')
+    .select('*')
+    .eq('identifier', identifier)
+    .eq('endpoint', endpoint)
+    .gte('window_start', windowStart.toISOString())
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Rate limit check error:', error)
+    return { allowed: true }
+  }
+
+  if (!existing) {
+    await supabase.from('rate_limits').insert({
+      identifier,
+      endpoint,
+      request_count: 1,
+      window_start: new Date().toISOString()
+    })
+    return { allowed: true }
+  }
+
+  if (existing.request_count >= limit) {
+    const retryAfter = Math.ceil((new Date(existing.window_start).getTime() + windowMinutes * 60 * 1000 - Date.now()) / 1000)
+    return { allowed: false, retryAfter }
+  }
+
+  await supabase
+    .from('rate_limits')
+    .update({ request_count: existing.request_count + 1 })
+    .eq('id', existing.id)
+
+  return { allowed: true }
 }
 
 serve(async (req) => {
@@ -15,23 +77,38 @@ serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { 
-      clientName, 
-      clientEmail, 
-      clientPhone, 
-      serviceCategory, 
-      serviceType, 
-      description,
-      urgency = 'normal'
-    } = await req.json()
-
-    // Validate required fields
-    if (!clientName || !clientEmail || !clientPhone || !serviceCategory || !serviceType || !description) {
+    // Get IP for rate limiting
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    
+    // Check rate limit: 3 requests per hour
+    const rateLimitCheck = await checkRateLimit(supabase, ip, 'service-request', 3, 60)
+    if (!rateLimitCheck.allowed) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { 
+          status: 429,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': rateLimitCheck.retryAfter?.toString() || '3600'
+          } 
+        }
+      )
+    }
+
+    const body = await req.json()
+
+    // Validate input
+    const validation = serviceRequestSchema.safeParse(body)
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Validation failed', 
+          details: validation.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -39,8 +116,10 @@ serve(async (req) => {
       )
     }
 
+    const { clientName, clientEmail, clientPhone, serviceCategory, serviceType, description, urgency } = validation.data
+
     // Define service pricing and duration estimates
-    const serviceInfo = {
+    const serviceInfo: Record<string, Record<string, { cost: number; days: number }>> = {
       'e-citizen': {
         'birth-certificate': { cost: 500, days: 5 },
         'national-id': { cost: 300, days: 7 },
@@ -76,7 +155,7 @@ serve(async (req) => {
     }
 
     // Get estimated cost and completion date
-    const service = serviceInfo[serviceCategory as keyof typeof serviceInfo]?.[serviceType as keyof any]
+    const service = serviceInfo[serviceCategory]?.[serviceType]
     const estimatedCost = service?.cost || null
     const estimatedDays = service?.days || 7
     const estimatedCompletionDate = new Date()
@@ -110,7 +189,7 @@ serve(async (req) => {
       )
     }
 
-    // Send confirmation email to client
+    // Send confirmation emails with sanitized content
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     if (resendApiKey) {
       const clientEmailData = {
@@ -119,12 +198,12 @@ serve(async (req) => {
         subject: 'Service Request Confirmation - KG Designs',
         html: `
           <h2>Service Request Confirmation</h2>
-          <p>Dear ${clientName},</p>
+          <p>Dear ${escapeHtml(clientName)},</p>
           <p>Thank you for choosing KG Designs. We have received your service request and will begin processing immediately.</p>
           
           <h3>Request Details:</h3>
-          <p><strong>Service:</strong> ${serviceCategory.toUpperCase()} - ${serviceType}</p>
-          <p><strong>Description:</strong> ${description}</p>
+          <p><strong>Service:</strong> ${escapeHtml(serviceCategory.toUpperCase())} - ${escapeHtml(serviceType)}</p>
+          <p><strong>Description:</strong> ${escapeHtml(description)}</p>
           <p><strong>Request ID:</strong> ${data.id}</p>
           ${estimatedCost ? `<p><strong>Estimated Cost:</strong> KSh ${estimatedCost.toLocaleString()}</p>` : ''}
           <p><strong>Estimated Completion:</strong> ${estimatedCompletionDate.toLocaleDateString()}</p>
@@ -140,21 +219,20 @@ serve(async (req) => {
         `
       }
 
-      // Send notification email to admin
       const adminEmailData = {
         from: 'KG Designs <noreply@kgdesigns.co.ke>',
         to: ['mrkg848@gmail.com'],
-        subject: `New Service Request: ${serviceCategory} - ${serviceType}`,
+        subject: `New Service Request: ${escapeHtml(serviceCategory)} - ${escapeHtml(serviceType)}`,
         html: `
           <h2>New Service Request</h2>
-          <p><strong>Client:</strong> ${clientName}</p>
-          <p><strong>Email:</strong> ${clientEmail}</p>
-          <p><strong>Phone:</strong> ${clientPhone}</p>
-          <p><strong>Service:</strong> ${serviceCategory.toUpperCase()} - ${serviceType}</p>
+          <p><strong>Client:</strong> ${escapeHtml(clientName)}</p>
+          <p><strong>Email:</strong> ${escapeHtml(clientEmail)}</p>
+          <p><strong>Phone:</strong> ${escapeHtml(clientPhone)}</p>
+          <p><strong>Service:</strong> ${escapeHtml(serviceCategory.toUpperCase())} - ${escapeHtml(serviceType)}</p>
           <p><strong>Priority:</strong> ${urgency === 'urgent' ? 'HIGH' : 'NORMAL'}</p>
           
           <h3>Description:</h3>
-          <p>${description}</p>
+          <p>${escapeHtml(description)}</p>
           
           <h3>Estimates:</h3>
           ${estimatedCost ? `<p><strong>Cost:</strong> KSh ${estimatedCost.toLocaleString()}</p>` : ''}
@@ -165,7 +243,6 @@ serve(async (req) => {
       }
 
       try {
-        // Send both emails
         await Promise.all([
           fetch('https://api.resend.com/emails', {
             method: 'POST',
@@ -204,7 +281,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in service-request:', error.message)
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 

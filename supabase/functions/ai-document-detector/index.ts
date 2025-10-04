@@ -1,9 +1,57 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Input validation schema
+const detectionSchema = z.object({
+  documentContent: z.string().trim().min(1, "Document content is required").max(500000, "Document too large (max 500KB)"),
+  documentName: z.string().trim().min(1, "Document name is required").max(255, "Name must be less than 255 characters"),
+  userId: z.string().uuid().optional()
+})
+
+// Rate limiting function
+async function checkRateLimit(supabase: any, identifier: string, endpoint: string, limit: number, windowMinutes: number): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000)
+  
+  const { data: existing, error } = await supabase
+    .from('rate_limits')
+    .select('*')
+    .eq('identifier', identifier)
+    .eq('endpoint', endpoint)
+    .gte('window_start', windowStart.toISOString())
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Rate limit check error:', error)
+    return { allowed: true }
+  }
+
+  if (!existing) {
+    await supabase.from('rate_limits').insert({
+      identifier,
+      endpoint,
+      request_count: 1,
+      window_start: new Date().toISOString()
+    })
+    return { allowed: true }
+  }
+
+  if (existing.request_count >= limit) {
+    const retryAfter = Math.ceil((new Date(existing.window_start).getTime() + windowMinutes * 60 * 1000 - Date.now()) / 1000)
+    return { allowed: false, retryAfter }
+  }
+
+  await supabase
+    .from('rate_limits')
+    .update({ request_count: existing.request_count + 1 })
+    .eq('id', existing.id)
+
+  return { allowed: true }
 }
 
 serve(async (req) => {
@@ -15,15 +63,37 @@ serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { documentContent, documentName, userId } = await req.json()
-
-    // Validate required fields
-    if (!documentContent || !documentName) {
+    // Get IP or userId for rate limiting
+    const body = await req.json()
+    const identifier = body.userId || req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    
+    // Check rate limit: 10 requests per hour
+    const rateLimitCheck = await checkRateLimit(supabase, identifier, 'ai-detection', 10, 60)
+    if (!rateLimitCheck.allowed) {
       return new Response(
-        JSON.stringify({ error: 'Missing document content or name' }),
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { 
+          status: 429,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': rateLimitCheck.retryAfter?.toString() || '3600'
+          } 
+        }
+      )
+    }
+
+    // Validate input
+    const validation = detectionSchema.safeParse(body)
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Validation failed', 
+          details: validation.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
@@ -31,7 +101,9 @@ serve(async (req) => {
       )
     }
 
-    // Simple AI detection algorithm (in real world, you'd use OpenAI or similar)
+    const { documentContent, documentName, userId } = validation.data
+
+    // Simple AI detection algorithm
     const detectionResult = analyzeDocument(documentContent)
 
     // Store detection result in database
@@ -84,7 +156,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in ai-document-detector:', error.message)
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 
@@ -96,7 +168,7 @@ serve(async (req) => {
 })
 
 function analyzeDocument(content: string) {
-  // Simple rule-based AI detection (in production, use proper ML models)
+  // Simple rule-based AI detection
   const text = content.toLowerCase()
   
   // AI writing patterns

@@ -1,9 +1,82 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+// Input validation schemas
+const personalInfoSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(100),
+  email: z.string().trim().email("Invalid email").max(255),
+  phone: z.string().trim().max(20).optional(),
+  location: z.string().trim().max(100).optional(),
+  linkedin: z.string().trim().max(255).optional()
+})
+
+const experienceSchema = z.object({
+  position: z.string().trim().max(100),
+  company: z.string().trim().max(100),
+  startDate: z.string().trim().max(50),
+  endDate: z.string().trim().max(50).optional(),
+  description: z.string().trim().max(2000).optional()
+})
+
+const educationSchema = z.object({
+  degree: z.string().trim().max(100),
+  institution: z.string().trim().max(100),
+  year: z.string().trim().max(50)
+})
+
+const resumeSchema = z.object({
+  personalInfo: personalInfoSchema,
+  summary: z.string().trim().max(2000).optional(),
+  experience: z.array(experienceSchema).optional(),
+  education: z.array(educationSchema).optional(),
+  skills: z.array(z.string().trim().max(50)).optional(),
+  userId: z.string().uuid().optional()
+})
+
+// Rate limiting function
+async function checkRateLimit(supabase: any, identifier: string, endpoint: string, limit: number, windowMinutes: number): Promise<{ allowed: boolean; retryAfter?: number }> {
+  const windowStart = new Date(Date.now() - windowMinutes * 60 * 1000)
+  
+  const { data: existing, error } = await supabase
+    .from('rate_limits')
+    .select('*')
+    .eq('identifier', identifier)
+    .eq('endpoint', endpoint)
+    .gte('window_start', windowStart.toISOString())
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Rate limit check error:', error)
+    return { allowed: true }
+  }
+
+  if (!existing) {
+    await supabase.from('rate_limits').insert({
+      identifier,
+      endpoint,
+      request_count: 1,
+      window_start: new Date().toISOString()
+    })
+    return { allowed: true }
+  }
+
+  if (existing.request_count >= limit) {
+    const retryAfter = Math.ceil((new Date(existing.window_start).getTime() + windowMinutes * 60 * 1000 - Date.now()) / 1000)
+    return { allowed: false, retryAfter }
+  }
+
+  await supabase
+    .from('rate_limits')
+    .update({ request_count: existing.request_count + 1 })
+    .eq('id', existing.id)
+
+  return { allowed: true }
 }
 
 serve(async (req) => {
@@ -15,28 +88,46 @@ serve(async (req) => {
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { 
-      personalInfo, 
-      summary, 
-      experience, 
-      education, 
-      skills, 
-      userId = null 
-    } = await req.json()
-
-    // Validate required fields
-    if (!personalInfo || !personalInfo.name || !personalInfo.email) {
+    const body = await req.json()
+    
+    // Get user ID or IP for rate limiting
+    const identifier = body.userId || req.headers.get('x-forwarded-for')?.split(',')[0] || 'unknown'
+    
+    // Check rate limit: 10 requests per hour
+    const rateLimitCheck = await checkRateLimit(supabase, identifier, 'resume-generator', 10, 60)
+    if (!rateLimitCheck.allowed) {
       return new Response(
-        JSON.stringify({ error: 'Missing required personal information' }),
+        JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+        { 
+          status: 429,
+          headers: { 
+            ...corsHeaders, 
+            'Content-Type': 'application/json',
+            'Retry-After': rateLimitCheck.retryAfter?.toString() || '3600'
+          } 
+        }
+      )
+    }
+
+    // Validate input
+    const validation = resumeSchema.safeParse(body)
+    if (!validation.success) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Validation failed', 
+          details: validation.error.errors.map(e => ({ field: e.path.join('.'), message: e.message }))
+        }),
         { 
           status: 400, 
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
     }
+
+    const { personalInfo, summary, experience, education, skills, userId } = validation.data
 
     // Generate resume title
     const resumeTitle = `${personalInfo.name} - Resume - ${new Date().toLocaleDateString()}`
@@ -45,7 +136,7 @@ serve(async (req) => {
     const { data, error: dbError } = await supabase
       .from('resumes')
       .insert({
-        user_id: userId,
+        user_id: userId || null,
         title: resumeTitle,
         personal_info: personalInfo,
         summary: summary || '',
@@ -77,8 +168,7 @@ serve(async (req) => {
       skills: skills || []
     })
 
-    // Generate PDF using a simple HTML to PDF conversion
-    // For now, we'll return the HTML content and download URL
+    // Generate download URL
     const downloadUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/download-resume?id=${data.id}`
 
     return new Response(
@@ -96,7 +186,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    console.error('Error in resume-generator:', error.message)
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 

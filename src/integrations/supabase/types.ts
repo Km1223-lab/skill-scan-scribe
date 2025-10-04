@@ -334,6 +334,33 @@ export type Database = {
         }
         Relationships: []
       }
+      rate_limits: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          identifier: string
+          request_count: number
+          window_start: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          identifier: string
+          request_count?: number
+          window_start?: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          identifier?: string
+          request_count?: number
+          window_start?: string
+        }
+        Relationships: []
+      }
       resumes: {
         Row: {
           created_at: string
@@ -472,6 +499,10 @@ export type Database = {
     }
     Functions: {
       cleanup_old_contact_messages: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
+      cleanup_old_rate_limits: {
         Args: Record<PropertyKey, never>
         Returns: number
       }
