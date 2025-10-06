@@ -7,6 +7,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// HTML sanitization utility to prevent XSS attacks
+function escapeHtml(unsafe: string): string {
+  if (!unsafe) return ''
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+// Production-safe logging utility
+function logSecure(level: 'info' | 'error' | 'warn', message: string, context?: Record<string, any>) {
+  const isDev = Deno.env.get('ENVIRONMENT') === 'development'
+  const timestamp = new Date().toISOString()
+  
+  if (isDev) {
+    console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context || '')
+  } else {
+    // Production: sanitize and limit information
+    const sanitizedContext = context ? Object.keys(context).reduce((acc, key) => {
+      // Never log sensitive fields
+      if (['email', 'phone', 'password', 'token', 'content'].includes(key)) {
+        acc[key] = '[REDACTED]'
+      } else {
+        acc[key] = context[key]
+      }
+      return acc
+    }, {} as Record<string, any>) : {}
+    
+    console.log(JSON.stringify({ timestamp, level, message, ...sanitizedContext }))
+  }
+}
+
 // Input validation schemas
 const personalInfoSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(100),
@@ -52,7 +86,7 @@ async function checkRateLimit(supabase: any, identifier: string, endpoint: strin
     .single()
 
   if (error && error.code !== 'PGRST116') {
-    console.error('Rate limit check error:', error)
+    logSecure('error', 'Rate limit check error', { code: error.code })
     return { allowed: true }
   }
 
@@ -149,7 +183,7 @@ serve(async (req) => {
       .single()
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      logSecure('error', 'Failed to save resume', { code: dbError.code })
       return new Response(
         JSON.stringify({ error: 'Failed to save resume' }),
         { 
@@ -186,7 +220,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error in resume-generator:', error.message)
+    logSecure('error', 'Internal server error in resume-generator', { errorType: error?.constructor?.name })
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 
@@ -216,12 +250,17 @@ function generateResumeHTML(data: any, isPublic: boolean = false): string {
   
   const contactInfo = contactParts.join(' | ');
   
+  // Sanitize all user input to prevent XSS attacks
+  const sanitizedName = escapeHtml(safePersonalInfo.name)
+  const sanitizedContact = escapeHtml(contactInfo)
+  const sanitizedSummary = escapeHtml(summary)
+  
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>${safePersonalInfo.name} - Resume</title>
+      <title>${sanitizedName} - Resume</title>
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; color: #333; }
         .header { text-align: center; margin-bottom: 30px; }
@@ -246,14 +285,14 @@ function generateResumeHTML(data: any, isPublic: boolean = false): string {
     <body>
       ${isPublic ? '<div class="privacy-notice">📋 Public Resume View - Contact information has been filtered for privacy protection.</div>' : ''}
       <div class="header">
-        <div class="name">${safePersonalInfo.name}</div>
-        ${contactInfo ? `<div class="contact">${contactInfo}</div>` : ''}
+        <div class="name">${sanitizedName}</div>
+        ${contactInfo ? `<div class="contact">${sanitizedContact}</div>` : ''}
       </div>
 
       ${summary ? `
         <div class="section">
           <div class="section-title">Professional Summary</div>
-          <p>${summary}</p>
+          <p>${sanitizedSummary}</p>
         </div>
       ` : ''}
 
@@ -262,11 +301,11 @@ function generateResumeHTML(data: any, isPublic: boolean = false): string {
           <div class="section-title">Work Experience</div>
           ${experience.map((exp: any) => `
             <div class="experience-item">
-              <div class="job-title">${exp.position}</div>
-              <div class="company">${exp.company}</div>
-              <div class="duration">${exp.startDate} - ${exp.endDate || 'Present'}</div>
+              <div class="job-title">${escapeHtml(exp.position)}</div>
+              <div class="company">${escapeHtml(exp.company)}</div>
+              <div class="duration">${escapeHtml(exp.startDate)} - ${escapeHtml(exp.endDate || 'Present')}</div>
               <div style="clear: both;"></div>
-              ${exp.description ? `<div class="description">${exp.description}</div>` : ''}
+              ${exp.description ? `<div class="description">${escapeHtml(exp.description)}</div>` : ''}
             </div>
           `).join('')}
         </div>
@@ -277,8 +316,8 @@ function generateResumeHTML(data: any, isPublic: boolean = false): string {
           <div class="section-title">Education</div>
           ${education.map((edu: any) => `
             <div class="education-item">
-              <div class="degree">${edu.degree}</div>
-              <div class="institution">${edu.institution} - ${edu.year}</div>
+              <div class="degree">${escapeHtml(edu.degree)}</div>
+              <div class="institution">${escapeHtml(edu.institution)} - ${escapeHtml(edu.year)}</div>
             </div>
           `).join('')}
         </div>
@@ -288,7 +327,7 @@ function generateResumeHTML(data: any, isPublic: boolean = false): string {
         <div class="section">
           <div class="section-title">Skills</div>
           <div class="skills-list">
-            ${skills.map((skill: string) => `<span class="skill">${skill}</span>`).join('')}
+            ${skills.map((skill: string) => `<span class="skill">${escapeHtml(skill)}</span>`).join('')}
           </div>
         </div>
       ` : ''}

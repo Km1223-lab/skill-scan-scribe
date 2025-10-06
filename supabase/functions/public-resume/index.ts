@@ -6,6 +6,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// HTML sanitization utility to prevent XSS attacks
+function escapeHtml(unsafe: string): string {
+  if (!unsafe) return ''
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;")
+}
+
+// Production-safe logging utility
+function logSecure(level: 'info' | 'error' | 'warn', message: string, context?: Record<string, any>) {
+  const isDev = Deno.env.get('ENVIRONMENT') === 'development'
+  const timestamp = new Date().toISOString()
+  
+  if (isDev) {
+    console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, context || '')
+  } else {
+    // Production: sanitize and limit information
+    const sanitizedContext = context ? Object.keys(context).reduce((acc, key) => {
+      // Never log sensitive fields
+      if (['email', 'phone', 'password', 'token', 'personal_info'].includes(key)) {
+        acc[key] = '[REDACTED]'
+      } else {
+        acc[key] = context[key]
+      }
+      return acc
+    }, {} as Record<string, any>) : {}
+    
+    console.log(JSON.stringify({ timestamp, level, message, ...sanitizedContext }))
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -39,7 +73,7 @@ serve(async (req) => {
     });
 
     if (error) {
-      console.error('Database error:', error);
+      logSecure('error', 'Failed to retrieve public resume', { code: error.code })
       return new Response(
         JSON.stringify({ error: 'Failed to retrieve resume' }),
         { 
@@ -62,7 +96,7 @@ serve(async (req) => {
     const resumeData = data[0];
 
     // Log the access for security monitoring (without logging sensitive data)
-    console.log(`Public resume accessed: ${resumeData.id}, token: ${shareToken}, timestamp: ${new Date().toISOString()}`);
+    logSecure('info', 'Public resume accessed', { resumeId: resumeData.id })
 
     // Generate HTML content with filtered data
     const resumeHTML = generateSecureResumeHTML(resumeData);
@@ -82,7 +116,7 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error:', error)
+    logSecure('error', 'Internal server error in public-resume', { errorType: error?.constructor?.name })
     return new Response(
       JSON.stringify({ error: 'Internal server error' }),
       { 
@@ -103,12 +137,19 @@ function generateSecureResumeHTML(data: any): string {
     linkedin: personal_info?.linkedin || ''
   };
   
+  // Sanitize all user input to prevent XSS attacks
+  const sanitizedName = escapeHtml(safePersonalInfo.name)
+  const sanitizedLocation = escapeHtml(safePersonalInfo.location)
+  const sanitizedLinkedin = escapeHtml(safePersonalInfo.linkedin)
+  const sanitizedTitle = escapeHtml(title || `${sanitizedName} - Resume`)
+  const sanitizedSummary = escapeHtml(summary)
+  
   return `
     <!DOCTYPE html>
     <html>
     <head>
       <meta charset="UTF-8">
-      <title>${title || `${safePersonalInfo.name} - Resume`}</title>
+      <title>${sanitizedTitle}</title>
       <meta name="robots" content="noindex, nofollow">
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; margin: 0; padding: 20px; color: #333; max-width: 800px; margin: 0 auto; }
@@ -138,17 +179,17 @@ function generateSecureResumeHTML(data: any): string {
       </div>
       
       <div class="header">
-        <div class="name">${safePersonalInfo.name}</div>
+        <div class="name">${sanitizedName}</div>
         <div class="contact">
-          ${safePersonalInfo.location ? `${safePersonalInfo.location}` : ''}
-          ${safePersonalInfo.linkedin ? ` | ${safePersonalInfo.linkedin}` : ''}
+          ${sanitizedLocation ? `${sanitizedLocation}` : ''}
+          ${sanitizedLinkedin ? ` | ${sanitizedLinkedin}` : ''}
         </div>
       </div>
 
       ${summary ? `
         <div class="section">
           <div class="section-title">Professional Summary</div>
-          <p>${summary}</p>
+          <p>${sanitizedSummary}</p>
         </div>
       ` : ''}
 
@@ -157,11 +198,11 @@ function generateSecureResumeHTML(data: any): string {
           <div class="section-title">Work Experience</div>
           ${experience.map((exp: any) => `
             <div class="experience-item">
-              <div class="job-title">${exp.position || 'Position not specified'}</div>
-              <div class="company">${exp.company || 'Company not specified'}</div>
-              <div class="duration">${exp.startDate || ''} - ${exp.endDate || 'Present'}</div>
+              <div class="job-title">${escapeHtml(exp.position || 'Position not specified')}</div>
+              <div class="company">${escapeHtml(exp.company || 'Company not specified')}</div>
+              <div class="duration">${escapeHtml(exp.startDate || '')} - ${escapeHtml(exp.endDate || 'Present')}</div>
               <div style="clear: both;"></div>
-              ${exp.description ? `<div class="description">${exp.description}</div>` : ''}
+              ${exp.description ? `<div class="description">${escapeHtml(exp.description)}</div>` : ''}
             </div>
           `).join('')}
         </div>
@@ -172,8 +213,8 @@ function generateSecureResumeHTML(data: any): string {
           <div class="section-title">Education</div>
           ${education.map((edu: any) => `
             <div class="education-item">
-              <div class="degree">${edu.degree || 'Degree not specified'}</div>
-              <div class="institution">${edu.institution || 'Institution not specified'} - ${edu.year || 'Year not specified'}</div>
+              <div class="degree">${escapeHtml(edu.degree || 'Degree not specified')}</div>
+              <div class="institution">${escapeHtml(edu.institution || 'Institution not specified')} - ${escapeHtml(edu.year || 'Year not specified')}</div>
             </div>
           `).join('')}
         </div>
@@ -183,7 +224,7 @@ function generateSecureResumeHTML(data: any): string {
         <div class="section">
           <div class="section-title">Skills</div>
           <div class="skills-list">
-            ${skills.map((skill: string) => `<span class="skill">${skill}</span>`).join('')}
+            ${skills.map((skill: string) => `<span class="skill">${escapeHtml(skill)}</span>`).join('')}
           </div>
         </div>
       ` : ''}
